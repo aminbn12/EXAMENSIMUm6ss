@@ -1,0 +1,6 @@
+{
+  "name": "ExamRoom Planner",
+  "description": "Interactive layout simulator for managing exam room capacities and seating arrangements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
