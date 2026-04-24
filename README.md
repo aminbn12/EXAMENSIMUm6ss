@@ -1,20 +1,19 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# EXAMENSIM PRO
 
-# Run and deploy your AI Studio app
+Application de planification des salles d examen.
 
-This contains everything you need to run your app locally.
+## Fonctionnalites
 
+- Visualisation des salles
+- Gestion des places
+- Sauvegarde des configurations
 
+## Installation
 
-## Run Locally
+npm install
 
-**Prerequisites:**  Node.js
+npm run dev
 
+npm run build
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Déployé via GitHub Pages : https://aminbn12.github.io/EXAMENSIMUm6ss/
