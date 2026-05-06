@@ -9,13 +9,15 @@ export interface Seat {
   col: number;
   isActive: boolean;
   blockId?: string;
-  isBonus?: boolean;
+  isHidden?: boolean;
 }
 
 export interface RoomLayout {
   id: string;
   name: string;
   seats: Seat[];
+  blockNames?: Record<string, string>;
+  blockOrder?: string[];
 }
 
 export interface SavedProposal {

@@ -4,6 +4,21 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  XCircle,
+  FolderOpen,
+  Trash2,
+  Plus,
+  Layout,
+  Sun,
+  Moon,
+  Download,
+  Upload,
+  Edit3
+} from 'lucide-react';
+import { INITIAL_ROOMS } from './constants';
+import { RoomLayout, Seat, SavedProposal } from './types';
 
 // Help component to auto-scale content to fit parent
 const FitContainer = ({ children }: { children: React.ReactNode }) => {
@@ -28,12 +43,13 @@ const FitContainer = ({ children }: { children: React.ReactNode }) => {
       const scaleX = availableWidth / contentWidth;
       const scaleY = availableHeight / contentHeight;
       
-      const newScale = Math.min(scaleX, scaleY, 1.1); // Limit maximum scale
+      const newScale = Math.min(scaleX, scaleY, 4.0); // Allow much larger maximum scale for small blocks
       setScale(newScale);
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
     if (containerRef.current) resizeObserver.observe(containerRef.current);
+    if (contentRef.current) resizeObserver.observe(contentRef.current);
     
     // Initial calculation with a slight delay to ensure layout is ready
     const timer = setTimeout(handleResize, 50);
@@ -60,33 +76,85 @@ const FitContainer = ({ children }: { children: React.ReactNode }) => {
     </div>
   );
 };
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Users, 
-  Map as MapIcon, 
-  CheckCircle2, 
-  XCircle, 
-  Save, 
-  FolderOpen, 
-  Trash2, 
-  RotateCcw,
-  Plus,
-  Layout,
-  Sun,
-  Moon,
-  Download,
-  Upload
-} from 'lucide-react';
-import { INITIAL_ROOMS } from './constants';
-import { RoomLayout, Seat, SavedProposal } from './types';
+
+// Simple Toast notification component
+const Toast = ({ message, type }: { message: string; type: 'success' | 'error' | 'info' }) => {
+  const colors = {
+    success: 'bg-emerald-600 border-emerald-500',
+    error: 'bg-red-600 border-red-500',
+    info: 'bg-indigo-600 border-indigo-500',
+  };
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 40 }}
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] px-6 py-3 rounded-2xl border text-white text-sm font-bold shadow-2xl ${colors[type]}`}
+    >
+      {message}
+    </motion.div>
+  );
+};
 
 export default function App() {
-  const [rooms, setRooms] = useState<RoomLayout[]>(INITIAL_ROOMS);
-  const [activeRoomId, setActiveRoomId] = useState<string>(INITIAL_ROOMS[0].id);
+  const [rooms, setRooms] = useState<RoomLayout[]>(() => {
+    try {
+      const saved = localStorage.getItem('exam_rooms_def');
+      if (saved) {
+        const parsed: RoomLayout[] = JSON.parse(saved);
+        // Force remove old bonus seats from local storage
+        return parsed.map(r => ({
+          ...r,
+          seats: r.seats.filter(s => !(s as any).isBonus)
+        }));
+      }
+    } catch {}
+    return INITIAL_ROOMS;
+  });
+  const [activeRoomId, setActiveRoomId] = useState<string>(() => rooms[0]?.id || INITIAL_ROOMS[0].id);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [proposals, setProposals] = useState<SavedProposal[]>([]);
   const [proposalName, setProposalName] = useState('');
   const [showSaved, setShowSaved] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [magnifierEnabled, setMagnifierEnabled] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Change cursor when magnifier is enabled
+  useEffect(() => {
+    if (!magnifierEnabled) {
+      document.body.style.cursor = '';
+      return;
+    }
+    
+    const cursorUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='%234f46e5' stroke-width='2'/%3E%3C/svg%3E";
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+      
+      // Check if over seat area - if not, show normal cursor
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      const isOverSeatArea = element?.closest('.seat-grid-container, .realistic-seat-container') !== null;
+      
+      if (!isOverSeatArea) {
+        document.body.style.cursor = '';
+      } else {
+        document.body.style.cursor = `url("${cursorUrl}"), auto`;
+      }
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      document.body.style.cursor = '';
+    };
+  }, [magnifierEnabled]);
 
   // Sync theme with document
   useEffect(() => {
@@ -99,11 +167,21 @@ export default function App() {
 
   // Load proposals from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('exam_proposals');
-    if (saved) {
-      setProposals(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem('exam_proposals');
+      if (saved) {
+        setProposals(JSON.parse(saved));
+      }
+    } catch (err) {
+      console.error('Failed to load proposals from localStorage:', err);
+      localStorage.removeItem('exam_proposals');
     }
   }, []);
+
+  // Save room definitions on change
+  useEffect(() => {
+    localStorage.setItem('exam_rooms_def', JSON.stringify(rooms));
+  }, [rooms]);
 
   const saveProposals = (newProposals: SavedProposal[]) => {
     setProposals(newProposals);
@@ -115,9 +193,15 @@ export default function App() {
       if (room.id !== roomId) return room;
       return {
         ...room,
-        seats: room.seats.map(seat => 
-          seat.id === seatId ? { ...seat, isActive: !seat.isActive } : seat
-        )
+        seats: room.seats.map(seat => {
+          if (seat.id === seatId) {
+            if (isEditMode) {
+              return { ...seat, isHidden: !seat.isHidden };
+            }
+            return { ...seat, isActive: !seat.isActive };
+          }
+          return seat;
+        })
       };
     }));
   };
@@ -132,6 +216,187 @@ export default function App() {
     }));
   };
 
+  const addBlock = (roomId: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const newBlockId = `bloc${Date.now()}`;
+      const newSeats: Seat[] = [];
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          newSeats.push({
+            id: `${room.id}-${newBlockId}-${r}-${c}`,
+            row: r,
+            col: c,
+            isActive: true,
+            blockId: newBlockId
+          });
+        }
+      }
+      return { ...room, seats: [...room.seats, ...newSeats] };
+    }));
+  };
+
+  const removeBlock = (roomId: string, blockId: string) => {
+    if (!window.confirm("Supprimer ce bloc entier ?")) return;
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      return { ...room, seats: room.seats.filter(s => s.blockId !== blockId) };
+    }));
+  };
+
+  const rotateBlock = (roomId: string, blockId: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats.filter(s => s.blockId === blockId);
+      if (blockSeats.length === 0) return room;
+      
+      const maxRow = Math.max(...blockSeats.map(s => s.row));
+      
+      return {
+        ...room,
+        seats: room.seats.map(seat => {
+          if (seat.blockId === blockId) {
+            // Rotate 90 degrees clockwise
+            return {
+              ...seat,
+              row: seat.col,
+              col: maxRow - seat.row
+            };
+          }
+          return seat;
+        })
+      };
+    }));
+  };
+
+  const updateBlockName = (roomId: string, blockId: string, newName: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      return {
+        ...room,
+        blockNames: {
+          ...(room.blockNames || {}),
+          [blockId]: newName
+        }
+      };
+    }));
+  };
+
+  const moveBlock = (roomId: string, blockId: string, direction: 'left' | 'right') => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      
+      const currentBlocks = new Set(room.seats.map(s => s.blockId || 'default'));
+      const order = room.blockOrder || Array.from(currentBlocks).sort();
+      
+      // Ensure all current blocks are in order array
+      currentBlocks.forEach(b => {
+        if (!order.includes(b)) order.push(b);
+      });
+      
+      const currentIndex = order.indexOf(blockId);
+      if (currentIndex === -1) return room;
+      
+      if (direction === 'left' && currentIndex > 0) {
+        const newOrder = [...order];
+        [newOrder[currentIndex - 1], newOrder[currentIndex]] = [newOrder[currentIndex], newOrder[currentIndex - 1]];
+        return { ...room, blockOrder: newOrder };
+      }
+      
+      if (direction === 'right' && currentIndex < order.length - 1) {
+        const newOrder = [...order];
+        [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
+        return { ...room, blockOrder: newOrder };
+      }
+      
+      return room;
+    }));
+  };
+
+  const addRow = (roomId: string, blockId: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats.filter(s => s.blockId === blockId);
+      const cols = blockSeats.length > 0 ? Math.max(...blockSeats.map(s => s.col)) + 1 : 4;
+      const newRowIdx = blockSeats.length > 0 ? Math.max(...blockSeats.map(s => s.row)) + 1 : 0;
+      
+      const newSeats: Seat[] = [];
+      for (let c = 0; c < cols; c++) {
+        newSeats.push({
+          id: `${room.id}-${blockId}-${newRowIdx}-${c}-${Date.now()}`,
+          row: newRowIdx,
+          col: c,
+          isActive: true,
+          blockId
+        });
+      }
+      return { ...room, seats: [...room.seats, ...newSeats] };
+    }));
+  };
+
+  const removeRow = (roomId: string, blockId: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats.filter(s => s.blockId === blockId);
+      const maxRow = Math.max(...blockSeats.map(s => s.row));
+      if (maxRow < 0) return room;
+      return { ...room, seats: room.seats.filter(s => !(s.blockId === blockId && s.row === maxRow)) };
+    }));
+  };
+
+  const addCol = (roomId: string, blockId: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats.filter(s => s.blockId === blockId);
+      const rows = blockSeats.length > 0 ? Math.max(...blockSeats.map(s => s.row)) + 1 : 4;
+      const newColIdx = blockSeats.length > 0 ? Math.max(...blockSeats.map(s => s.col)) + 1 : 0;
+      
+      const newSeats: Seat[] = [];
+      for (let r = 0; r < rows; r++) {
+        newSeats.push({
+          id: `${room.id}-${blockId}-${r}-${newColIdx}-${Date.now()}`,
+          row: r,
+          col: newColIdx,
+          isActive: true,
+          blockId
+        });
+      }
+      return { ...room, seats: [...room.seats, ...newSeats] };
+    }));
+  };
+
+  const removeCol = (roomId: string, blockId: string) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats.filter(s => s.blockId === blockId);
+      const maxCol = Math.max(...blockSeats.map(s => s.col));
+      if (maxCol < 0) return room;
+      return { ...room, seats: room.seats.filter(s => !(s.blockId === blockId && s.col === maxCol)) };
+    }));
+  };
+
+  const addRoom = () => {
+    const newRoomName = window.prompt("Nom de la nouvelle salle :");
+    if (!newRoomName) return;
+    const newRoomId = `room-${Date.now()}`;
+    const newRoom: RoomLayout = {
+      id: newRoomId,
+      name: newRoomName,
+      seats: []
+    };
+    setRooms(prev => [...prev, newRoom]);
+    setActiveRoomId(newRoomId);
+    setIsEditMode(true);
+  };
+
+  const removeRoom = (roomId: string) => {
+    if (!window.confirm("Supprimer cette salle ?")) return;
+    setRooms(prev => prev.filter(r => r.id !== roomId));
+    if (activeRoomId === roomId) {
+      setActiveRoomId(rooms[0]?.id || '');
+    }
+  };
+
   const activeRoom = useMemo(() => 
     rooms.find(r => r.id === activeRoomId) || rooms[0],
     [rooms, activeRoomId]
@@ -141,8 +406,8 @@ export default function App() {
     const roomStats = rooms.map(room => ({
       id: room.id,
       name: room.name,
-      total: room.seats.length,
-      active: room.seats.filter(s => s.isActive).length
+      total: room.seats.filter(s => !s.isHidden).length,
+      active: room.seats.filter(s => s.isActive && !s.isHidden).length
     }));
 
     const totalCapacity = roomStats.reduce((acc, curr) => acc + curr.active, 0);
@@ -198,7 +463,7 @@ export default function App() {
 
   const exportToJson = () => {
     if (proposals.length === 0) {
-      alert("Aucune proposition à exporter.");
+      showToast('Aucune proposition à exporter.', 'info');
       return;
     }
     const dataStr = JSON.stringify(proposals, null, 2);
@@ -230,14 +495,14 @@ export default function App() {
               localStorage.setItem('exam_proposals', JSON.stringify(updated));
               return updated;
             });
-            alert(`${parsed.length} propositions importées avec succès.`);
+            showToast(`${parsed.length} propositions importées avec succès.`, 'success');
           } else {
-            alert("Format JSON invalide. Il doit s'agir d'une liste de propositions.");
+            showToast("Format JSON invalide. Il doit s'agir d'une liste de propositions.", 'error');
           }
         }
       } catch (err) {
-        console.error("Failed to parse JSON", err);
-        alert("Erreur lors de la lecture du fichier JSON.");
+        console.error('Failed to parse JSON', err);
+        showToast('Erreur lors de la lecture du fichier JSON.', 'error');
       }
     };
     fileReader.readAsText(file);
@@ -246,114 +511,167 @@ export default function App() {
   };
 
   const renderGridWithNumbers = (room: RoomLayout) => {
-    const renderBlockWithNumbers = (seats: Seat[], cols: number, title?: string) => {
+    let globalOffset = 0;
+    
+    for (const r of rooms) {
+      if (r.id === room.id) break;
+      globalOffset += r.seats.filter(s => s.isActive && !s.isHidden).length;
+    }
+    
+    const seatNumbers = new Map<string, number>();
+    let counter = globalOffset;
+    
+    room.seats.forEach(seat => {
+      if (seat.isActive && !seat.isHidden) {
+        counter++;
+        seatNumbers.set(seat.id, counter);
+      }
+    });
+    
+    const renderBlockWithNumbers = (seats: Seat[], cols: number, title?: string, blockId?: string) => {
       const rows = Array.from(new Set(seats.map(s => s.row))).sort((a, b) => a - b);
+      const maxCol = seats.length > 0 ? Math.max(0, ...seats.map(s => s.col)) + 1 : cols;
       
       return (
-        <div className="flex flex-col gap-2">
-          {title && <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center mb-1">{title}</div>}
+        <div className="flex flex-col gap-2 relative group/block">
+          {isEditMode && blockId && (
+            <div className="absolute -top-6 left-0 right-0 flex justify-center gap-1 opacity-0 group-hover/block:opacity-100 transition-opacity z-50">
+               <button onClick={() => moveBlock(room.id, blockId, 'left')} className="px-1.5 py-0.5 bg-indigo-500 text-white text-[8px] font-bold rounded shadow-sm">⬅</button>
+               <button onClick={() => moveBlock(room.id, blockId, 'right')} className="px-1.5 py-0.5 bg-indigo-500 text-white text-[8px] font-bold rounded shadow-sm">➡</button>
+               <button onClick={() => rotateBlock(room.id, blockId)} className="px-1.5 py-0.5 bg-indigo-500 text-white text-[8px] font-bold rounded shadow-sm">⟳ Pivoter</button>
+               <button onClick={() => addCol(room.id, blockId)} className="px-1.5 py-0.5 bg-indigo-500 text-white text-[8px] font-bold rounded shadow-sm">+Col</button>
+               <button onClick={() => removeCol(room.id, blockId)} className="px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-bold rounded shadow-sm">-Col</button>
+               <button onClick={() => addRow(room.id, blockId)} className="px-1.5 py-0.5 bg-indigo-500 text-white text-[8px] font-bold rounded shadow-sm">+Lig</button>
+               <button onClick={() => removeRow(room.id, blockId)} className="px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-bold rounded shadow-sm">-Lig</button>
+               <button onClick={() => removeBlock(room.id, blockId)} className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] font-bold rounded shadow-sm">Suppr</button>
+            </div>
+          )}
+          {(blockId && (isEditMode || room.blockNames?.[blockId] || title)) && (
+            isEditMode ? (
+              <input
+                type="text"
+                value={room.blockNames?.[blockId] || ''}
+                onChange={(e) => updateBlockName(room.id, blockId, e.target.value)}
+                placeholder={title || "Nom du bloc..."}
+                className="text-[10px] font-black text-center mb-1 bg-transparent border-b border-indigo-500/30 hover:border-indigo-500/60 focus:outline-none focus:border-indigo-500 uppercase tracking-widest w-full text-[var(--text-secondary)] transition-colors"
+              />
+            ) : (
+              <div className="text-[10px] font-black text-[var(--text-secondary)] uppercase tracking-widest text-center mb-1">
+                {room.blockNames?.[blockId] || title}
+              </div>
+            )
+          )}
           <div className="flex gap-3">
-            {/* Row Numbers Column */}
             <div className="flex flex-col gap-[6px] pt-[5px]">
               {rows.map(r => (
-                <div key={r} className="h-5 flex items-center text-[9px] font-mono font-bold text-slate-500 pr-1 border-r border-slate-800/50">
+                <div key={r} className="h-5 flex items-center text-[9px] font-mono font-bold text-[var(--text-secondary)] pr-1 border-r border-[var(--border-color)]">
                   {r >= 0 ? `R${r + 1}` : ''}
                 </div>
               ))}
             </div>
-            {/* Seats Grid */}
             <div 
               className="grid gap-[6px]"
               style={{ 
-                gridTemplateColumns: `repeat(${cols}, min-content)`,
+                gridTemplateColumns: `repeat(${Math.max(cols, maxCol)}, min-content)`,
                 gridAutoRows: '1.25rem'
               }}
             >
-              {seats.map(seat => (
-                <SeatBox key={seat.id} seat={seat} onClick={() => toggleSeat(room.id, seat.id)} />
-              ))}
+              {seats.map(seat => {
+                if (seat.isHidden && !isEditMode) return null;
+                const seatNumber = (!seat.isHidden && seat.isActive) ? seatNumbers.get(seat.id) : undefined;
+                return (
+                  <div 
+                    key={seat.id} 
+                    className={`relative ${seat.isHidden ? 'opacity-30 grayscale scale-90' : ''}`}
+                    style={{ gridColumnStart: seat.col + 1, gridRowStart: rows.indexOf(seat.row) + 1 }}
+                    data-seat-number={seatNumber ?? undefined}
+                  >
+                    {seatNumber && (
+                      <span className="absolute -top-1 -left-1 text-[8px] font-mono font-black text-white bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow shadow-indigo-500/40 z-10">
+                        {seatNumber}
+                      </span>
+                    )}
+                    <SeatBox seat={seat} onClick={() => toggleSeat(room.id, seat.id)} />
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       );
     };
 
-    if (room.id === 'omnisport' || room.id === 'polyvalente') {
-      return (
-        <div className="flex gap-10">
-          <div className="seat-grid-container">
-            {renderBlockWithNumbers(room.seats.filter(s => !s.isBonus), room.id === 'polyvalente' ? 4 : 6)}
-          </div>
-          <BonusSeats seats={room.seats.filter(s => s.isBonus)} onToggle={(id) => toggleSeat(room.id, id)} />
-        </div>
-      );
+    const regularSeats = room.seats;
+    
+    const blocksMap = new Map<string, Seat[]>();
+    regularSeats.forEach(s => {
+      const bid = s.blockId || 'default';
+      if (!blocksMap.has(bid)) blocksMap.set(bid, []);
+      blocksMap.get(bid)!.push(s);
+    });
+    
+    const blockIds = Array.from(blocksMap.keys());
+    if (room.blockOrder) {
+      blockIds.sort((a, b) => {
+        const indexA = room.blockOrder!.indexOf(a);
+        const indexB = room.blockOrder!.indexOf(b);
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+    } else {
+      blockIds.sort();
     }
 
-    if (room.id === 'conference') {
-      const blocks = ['bloc1', 'bloc2', 'bloc3'];
-      return (
-        <div className="flex gap-10">
-          <div className="flex gap-6">
-            {blocks.map(bid => (
-              <div key={bid} className="seat-grid-container">
-                {renderBlockWithNumbers(
-                  room.seats.filter(s => s.blockId === bid), 
-                  bid === 'bloc2' ? 11 : 6,
-                  bid
-                )}
+    return (
+      <div className="flex gap-10">
+        <div className="flex gap-8 flex-wrap justify-center items-start">
+          {blockIds.map((bid, index) => {
+            const blockSeats = blocksMap.get(bid)!;
+            const maxCol = blockSeats.length > 0 ? Math.max(...blockSeats.map(s => s.col)) + 1 : 0;
+            const title = blockIds.length > 1 ? `Bloc ${index + 1}` : undefined;
+            return (
+              <div key={bid} className="seat-grid-container relative">
+                {renderBlockWithNumbers(blockSeats, maxCol, title, bid)}
               </div>
-            ))}
-          </div>
-          <BonusSeats seats={room.seats.filter(s => s.isBonus)} onToggle={(id) => toggleSeat(room.id, id)} />
+            );
+          })}
+          {isEditMode && (
+             <div 
+               className="flex items-center justify-center border-2 border-dashed border-[var(--border-color)] rounded-xl p-8 hover:bg-[var(--card-bg)] hover:border-indigo-500/50 cursor-pointer transition-colors" 
+               onClick={() => addBlock(room.id)}
+             >
+               <span className="text-[var(--text-secondary)] font-bold uppercase tracking-widest text-xs">+ Nouveau Bloc</span>
+             </div>
+          )}
         </div>
-      );
-    }
-
-    if (room.id.startsWith('amphi')) {
-      const blocks = ['bloc1', 'bloc2'];
-      return (
-        <div className="flex gap-10">
-          <div className="flex gap-8">
-            {blocks.map(bid => (
-              <div key={bid} className="seat-grid-container">
-                {renderBlockWithNumbers(
-                  room.seats.filter(s => s.blockId === bid), 
-                  12,
-                  bid
-                )}
-              </div>
-            ))}
-          </div>
-          <BonusSeats seats={room.seats.filter(s => s.isBonus)} onToggle={(id) => toggleSeat(room.id, id)} />
-        </div>
-      );
-    }
-
-    return null;
+      </div>
+    );
   };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Header & Global Stats */}
-      <header className="bg-[var(--bg-header)] border-[var(--border-color)] border-b px-8 py-5 shrink-0 shadow-sm z-20 transition-colors duration-300">
+      <header className="bg-[var(--bg-header)] border-[var(--nav-border)] border-b px-8 py-5 shrink-0 shadow-sm z-20 transition-colors duration-300">
         <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-500/30">
               <Layout className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-black italic tracking-tighter text-[var(--text-primary)]">EXAMENSIM <span className="text-indigo-600 non-italic">PRO</span></h1>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">Planning & Capacité</p>
+              <h1 className="text-2xl font-black italic tracking-tighter text-[var(--nav-text-primary)]">EXAMENSIM <span className="text-indigo-600 non-italic">PRO</span></h1>
+              <p className="text-[10px] text-[var(--nav-text-secondary)] font-black uppercase tracking-widest mt-0.5">Planning & Capacité</p>
             </div>
           </div>
 
-          <div className="flex gap-2 inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-[var(--border-color)] shadow-sm">
-            <div className="px-6 py-2 text-center rounded-xl bg-[var(--stat-card-bg)] shadow-sm border border-[var(--border-color)]/30">
-              <p className="text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-1">Capacité Totale</p>
+          <div className="flex gap-2 inline-flex bg-[var(--nav-btn-bg)] p-1 rounded-2xl border border-[var(--nav-border)] shadow-sm">
+            <div className="px-6 py-2 text-center rounded-xl bg-[var(--nav-card-bg)] shadow-sm border border-[var(--nav-border)]/30">
+              <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--nav-text-secondary)] font-bold mb-1">Capacité Totale</p>
               <p className="text-2xl font-mono font-black text-indigo-600 dark:text-indigo-400 leading-none">{stats.totalPossible}</p>
             </div>
-            <div className="px-6 py-2 text-center rounded-xl bg-[var(--stat-card-bg)] shadow-sm border border-[var(--border-color)]/30">
-              <p className="text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-1">Places Actives</p>
+            <div className="px-6 py-2 text-center rounded-xl bg-[var(--nav-card-bg)] shadow-sm border border-[var(--nav-border)]/30">
+              <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--nav-text-secondary)] font-bold mb-1">Places Actives</p>
               <p className="text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400 leading-none">{stats.totalCapacity}</p>
             </div>
           </div>
@@ -361,27 +679,35 @@ export default function App() {
           <div className="flex gap-3 items-center">
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-xl bg-slate-800 dark:bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-all"
+              className="p-2 rounded-xl bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white transition-all"
               title={isDarkMode ? "Passer au mode clair" : "Passer au mode sombre"}
             >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-indigo-400" />}
+              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
+
+            <button 
+              onClick={() => setIsEditMode(!isEditMode)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-black uppercase tracking-widest transition-all ${isEditMode ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-[var(--nav-btn-bg)] border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white'}`}
+            >
+              <Edit3 className="w-4 h-4" /> {isEditMode ? 'Terminer' : 'Éditer'}
+            </button>
+            
             <button 
               onClick={() => setShowSaved(true)}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest text-[var(--nav-text-secondary)] hover:text-white transition-colors"
             >
               <FolderOpen className="w-4 h-4" /> Historique
             </button>
 
-            <div className="flex gap-1 border-x border-[var(--border-color)] px-4 mx-2">
+            <div className="flex gap-1 border-x border-[var(--nav-border)] px-4 mx-2">
               <button 
                 onClick={exportToJson}
-                className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/5 rounded-lg transition-all"
+                className="p-2 text-[var(--nav-text-secondary)] hover:text-indigo-400 hover:bg-white/10 rounded-lg transition-all"
                 title="Exporter en JSON"
               >
                 <Download className="w-5 h-5" />
               </button>
-              <label className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-500/5 rounded-lg transition-all cursor-pointer" title="Importer un JSON">
+              <label className="p-2 text-[var(--nav-text-secondary)] hover:text-emerald-400 hover:bg-white/10 rounded-lg transition-all cursor-pointer" title="Importer un JSON">
                 <Upload className="w-5 h-5" />
                 <input type="file" accept=".json" onChange={importFromJson} className="hidden" />
               </label>
@@ -389,15 +715,15 @@ export default function App() {
 
             <button 
               onClick={handleNewProposal}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-400 border border-indigo-500/20 bg-indigo-500/5 rounded-xl transition-all"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-400 hover:text-white border border-indigo-500/20 bg-indigo-500/10 rounded-xl transition-all"
             >
               <Plus className="w-4 h-4" /> Nouveau
             </button>
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-[var(--border-color)]">
+            <div className="flex bg-[var(--nav-btn-bg)] p-1 rounded-xl border border-[var(--nav-border)]">
               <input 
                 type="text" 
                 placeholder="Nom prop..."
-                className="bg-transparent px-3 py-1.5 text-xs focus:outline-none w-32 font-medium text-[var(--text-primary)]"
+                className="bg-transparent px-3 py-1.5 text-xs focus:outline-none w-32 font-medium text-[var(--nav-text-primary)] placeholder-[var(--nav-text-secondary)]"
                 value={proposalName}
                 onChange={(e) => setProposalName(e.target.value)}
               />
@@ -409,6 +735,19 @@ export default function App() {
                 Sauver
               </button>
             </div>
+            
+            <div className="flex items-center gap-2 px-3 py-1.5 border border-[var(--nav-border)] rounded-lg bg-[var(--nav-btn-bg)]">
+              <input
+                type="checkbox"
+                id="magnifier-toggle"
+                checked={magnifierEnabled}
+                onChange={(e) => setMagnifierEnabled(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded"
+              />
+              <label htmlFor="magnifier-toggle" className="text-xs font-bold text-[var(--nav-text-secondary)] cursor-pointer select-none hover:text-white transition-colors">
+                Loupe
+              </label>
+            </div>
           </div>
         </div>
       </header>
@@ -416,37 +755,46 @@ export default function App() {
       {/* Main Content */}
       <main className="flex flex-1 overflow-hidden">
         {/* Navigation Rail */}
-        <nav className="w-72 bg-slate-900 border-slate-800 border-r p-4 flex flex-col gap-1 overflow-y-auto shrink-0 shadow-2xl z-10 scrollbar-none">
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4 mt-2 px-2">Salles Disponibles</p>
+        <nav className="w-72 bg-[var(--bg-sidebar)] border-[var(--nav-border)] border-r p-4 flex flex-col gap-1 overflow-y-auto shrink-0 shadow-2xl z-10 scrollbar-none">
+          <p className="text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.3em] mb-4 mt-2 px-2">Salles Disponibles</p>
           {rooms.map(room => (
             <button
               key={room.id}
               onClick={() => setActiveRoomId(room.id)}
               className={`room-nav-btn ${
-                activeRoomId === room.id ? 'room-nav-btn-active-dark' : 'room-nav-btn-inactive-dark'
+                activeRoomId === room.id ? 'room-nav-btn-active' : 'room-nav-btn-inactive'
               }`}
             >
-              <span className="text-sm font-bold">{room.name}</span>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/20 text-indigo-300">{room.seats.filter(s => s.isActive).length}</span>
+              <span className="text-sm font-bold truncate">{room.name}</span>
+              <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300 ml-2 shrink-0">{room.seats.filter(s => s.isActive && !s.isHidden).length}</span>
             </button>
           ))}
+          
+          {isEditMode && (
+            <button 
+              onClick={addRoom}
+              className="mt-2 w-full text-center py-3 border border-dashed border-[var(--nav-border)] rounded-xl text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:bg-[var(--nav-btn-bg)] hover:text-white transition-all"
+            >
+              + Nouvelle Salle
+            </button>
+          )}
 
-          <div className="mt-8 pt-8 border-t border-slate-800/50">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-4 px-2">Historique Récent</p>
+          <div className="mt-8 pt-8 border-t border-[var(--nav-border)]">
+            <p className="text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.3em] mb-4 px-2">Historique Récent</p>
             <div className="space-y-2 px-2">
               {proposals.slice(0, 5).map(p => (
                 <div key={p.id} className="group relative">
                   <button
                     onClick={() => loadProposal(p)}
-                    className="w-full text-left p-3 bg-slate-800/40 rounded-xl border border-slate-700/50 hover:bg-slate-800 hover:border-indigo-500/30 transition-all"
+                    className="w-full text-left p-3 bg-[var(--nav-card-bg)] rounded-xl border border-[var(--nav-border)] hover:border-indigo-500/50 transition-all"
                   >
                     <div className="flex justify-between items-start mb-1">
-                      <span className="text-xs font-bold text-slate-200 truncate pr-6">{p.name}</span>
-                      <span className="text-[9px] font-mono text-indigo-400 shrink-0">
+                      <span className="text-xs font-bold text-[var(--nav-text-primary)] truncate pr-6">{p.name}</span>
+                      <span className="text-[9px] font-mono font-bold text-indigo-400 shrink-0">
                         {Object.values(p.roomData).flat().filter(v => v).length}p
                       </span>
                     </div>
-                    <span className="text-[9px] text-slate-500 block">{p.timestamp}</span>
+                    <span className="text-[9px] text-[var(--nav-text-secondary)] block">{p.timestamp}</span>
                   </button>
                   <button 
                     onClick={(e) => {
@@ -463,7 +811,7 @@ export default function App() {
               {proposals.length > 5 && (
                 <button 
                   onClick={() => setShowSaved(true)}
-                  className="w-full text-center py-2 text-[10px] font-black uppercase text-slate-500 hover:text-indigo-400 transition-colors"
+                  className="w-full text-center py-2 text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:text-white transition-colors"
                 >
                   Voir tout l'historique
                 </button>
@@ -473,15 +821,20 @@ export default function App() {
         </nav>
 
         {/* Viewport */}
-        <section className="flex-1 p-8 relative flex flex-col overflow-hidden">
-          <div className="max-w-[1200px] mx-auto w-full h-full flex flex-col">
-            <div className="flex justify-between items-end mb-8 border-[var(--border-color)] border-b pb-8 shrink-0 transition-colors duration-300">
+        <section className="flex-1 p-2 sm:p-4 relative flex flex-col overflow-hidden">
+          <div className="w-full h-full flex flex-col mx-auto max-w-[1600px]">
+            <div className="flex justify-between items-end mb-4 border-[var(--border-color)] border-b pb-4 shrink-0 transition-colors duration-300">
               <div>
                 <h2 className="text-5xl font-black uppercase tracking-tighter italic text-[var(--text-primary)] flex items-baseline gap-4 transition-colors duration-300">
                   {activeRoom.name}
-                  <span className="text-base font-mono font-medium not-italic text-slate-400 tracking-normal lowercase opacity-80 decoration-indigo-500/30 underline underline-offset-4">
-                    {activeRoom.seats.filter(s => s.isActive).length} / {activeRoom.seats.length} unités
+                  <span className="text-base font-mono font-medium not-italic text-[var(--text-secondary)] tracking-normal lowercase opacity-80 decoration-indigo-500/30 underline underline-offset-4">
+                    {activeRoom.seats.filter(s => s.isActive && !s.isHidden).length} / {activeRoom.seats.filter(s => !s.isHidden).length} unités
                   </span>
+                  {isEditMode && rooms.length > 1 && (
+                    <button onClick={() => removeRoom(activeRoom.id)} className="ml-4 p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
                 </h2>
               </div>
               <div className="flex gap-2">
@@ -523,6 +876,12 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {/* Magnifier Overlay */}
+        <Magnifier 
+          enabled={magnifierEnabled} 
+          mousePosition={mousePosition}
+        />
       </main>
 
       {/* Proposals Modal */}
@@ -558,7 +917,7 @@ export default function App() {
                     <div key={p.id} className="group p-4 bg-[var(--bg-header)] rounded-2xl border border-[var(--border-color)] flex items-center justify-between hover:border-indigo-500/30 transition-all">
                       <div>
                         <h4 className="font-bold text-[var(--text-primary)]">{p.name}</h4>
-                        <p className="text-[10px] font-mono text-slate-500">{p.timestamp}</p>
+                        <p className="text-[10px] font-mono text-[var(--text-secondary)]">{p.timestamp}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
@@ -581,6 +940,11 @@ export default function App() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* Toast Notifications */}
+      <AnimatePresence>
+        {toast && <Toast message={toast.message} type={toast.type} />}
       </AnimatePresence>
     </div>
   );
@@ -611,23 +975,135 @@ const SeatBox = ({ seat, onClick }: SeatBoxProps) => {
   );
 };
 
-interface BonusSeatsProps {
-  seats: Seat[];
-  onToggle: (id: string) => void;
+interface MagnifierProps {
+  enabled: boolean;
+  mousePosition: { x: number; y: number };
 }
 
-const BonusSeats = ({ seats, onToggle }: BonusSeatsProps) => {
-  if (seats.length === 0) return null;
+/**
+ * Magnifier — zooms the hovered seat-grid-container (avoids Framer Motion conflicts)
+ * and shows the seat number inside a floating lens circle.
+ */
+const Magnifier = ({ enabled, mousePosition }: MagnifierProps) => {
+  const ZOOM = 2.2;
+  const LENS_R = 88; // lens radius in px
+
+  const [isOverSeats, setIsOverSeats] = useState(false);
+  const [seatLabel, setSeatLabel] = useState<string | null>(null);
+  // Track the currently zoomed container so we can reset it
+  const activeContainerRef = useRef<HTMLElement | null>(null);
+
+  const resetContainer = (el: HTMLElement) => {
+    el.style.transform = '';
+    el.style.transformOrigin = '';
+    el.style.transition = '';
+    el.style.zIndex = '';
+  };
+
+  useEffect(() => {
+    if (!enabled) {
+      if (activeContainerRef.current) {
+        resetContainer(activeContainerRef.current);
+        activeContainerRef.current = null;
+      }
+      setIsOverSeats(false);
+      setSeatLabel(null);
+      return;
+    }
+
+    const { x, y } = mousePosition;
+    const el = document.elementFromPoint(x, y);
+    const container = el?.closest('.seat-grid-container') as HTMLElement | null;
+
+    // Reset previous container if we moved to a different one
+    if (activeContainerRef.current && activeContainerRef.current !== container) {
+      resetContainer(activeContainerRef.current);
+      activeContainerRef.current = null;
+    }
+
+    if (!container) {
+      setIsOverSeats(false);
+      setSeatLabel(null);
+      return;
+    }
+
+    setIsOverSeats(true);
+    activeContainerRef.current = container;
+
+    // Zoom centered on cursor position relative to the container
+    const rect = container.getBoundingClientRect();
+    const relX = ((x - rect.left) / rect.width) * 100;
+    const relY = ((y - rect.top) / rect.height) * 100;
+    container.style.transform = `scale(${ZOOM})`;
+    container.style.transformOrigin = `${relX}% ${relY}%`;
+    container.style.transition = 'transform 0.1s ease-out';
+    container.style.zIndex = '50';
+
+    // Read seat number from nearest data-seat-number ancestor
+    const seatWrapper = el?.closest('[data-seat-number]');
+    setSeatLabel(seatWrapper?.getAttribute('data-seat-number') ?? null);
+  }, [enabled, mousePosition]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (activeContainerRef.current) {
+        resetContainer(activeContainerRef.current);
+      }
+    };
+  }, []);
+
+  if (!enabled || !isOverSeats) return null;
+
   return (
-    <div className="flex flex-col h-full justify-start pt-4">
-      <div className="seat-grid-container border-indigo-200 dark:border-indigo-500/20 bg-indigo-50/50 dark:bg-indigo-500/5 shadow-sm">
-        <p className="text-[8px] font-black uppercase text-indigo-500 dark:text-indigo-400 mb-2 tracking-widest text-center">Bonus</p>
-        <div className="grid grid-cols-2 gap-1.5 px-0.5 py-0.5">
-          {seats.map(seat => (
-            <SeatBox key={seat.id} seat={seat} onClick={() => onToggle(seat.id)} />
-          ))}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.7 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.7 }}
+      transition={{ duration: 0.12 }}
+      className="fixed pointer-events-none z-[9999] flex items-center justify-center"
+      style={{
+        left: mousePosition.x - LENS_R,
+        top: mousePosition.y - LENS_R,
+        width: LENS_R * 2,
+        height: LENS_R * 2,
+      }}
+    >
+      {/* Outer ring */}
+      <div
+        className="w-full h-full rounded-full flex items-center justify-center relative"
+        style={{
+          border: '2.5px solid rgba(99,102,241,0.75)',
+          background: 'rgba(99,102,241,0.04)',
+          boxShadow: '0 0 0 1px rgba(99,102,241,0.15), 0 8px 32px rgba(99,102,241,0.12)',
+        }}
+      >
+        {/* Crosshair lines */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute w-full h-px bg-indigo-400/25" />
+          <div className="absolute h-full w-px bg-indigo-400/25" />
         </div>
+        {/* Center dot */}
+        <div className="absolute w-2 h-2 rounded-full bg-indigo-500/40" />
+        {/* Seat label */}
+        {seatLabel ? (
+          <div
+            className="absolute bottom-5 px-3 py-1 rounded-full text-xs font-black font-mono text-indigo-600 dark:text-indigo-300"
+            style={{
+              background: 'rgba(255,255,255,0.9)',
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(99,102,241,0.3)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            }}
+          >
+            #{seatLabel}
+          </div>
+        ) : (
+          <span className="absolute bottom-5 text-[10px] font-mono text-indigo-400/60">{ZOOM}x</span>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 };
+
+

@@ -48,27 +48,14 @@ const generateAmphiBlock = (idPrefix: string, blockId: string): Seat[] => {
   return seats;
 };
 
-const bonusSeats = (idPrefix: string, count: number): Seat[] => {
-  const seats: Seat[] = [];
-  for (let i = 0; i < count; i++) {
-    seats.push({
-      id: `${idPrefix}-bonus-${i}`,
-      row: -1, // Special row for bonus
-      col: i,
-      isActive: true,
-      isBonus: true
-    });
-  }
-  return seats;
-};
+
 
 export const INITIAL_ROOMS: RoomLayout[] = [
   {
     id: 'omnisport',
     name: 'Salle Omnisport',
     seats: [
-      ...generateSeats('omni', 14, 6),
-      ...bonusSeats('omni', 8)
+      ...generateSeats('omni', 14, 6)
     ]
   },
   {
@@ -77,8 +64,7 @@ export const INITIAL_ROOMS: RoomLayout[] = [
     seats: [
       ...generateSeats('conf', 12, 6, 'bloc1'),
       ...generateSeats('conf', 12, 11, 'bloc2'),
-      ...generateSeats('conf', 12, 6, 'bloc3'),
-      ...bonusSeats('conf', 8)
+      ...generateSeats('conf', 12, 6, 'bloc3')
     ]
   },
   {
@@ -86,8 +72,7 @@ export const INITIAL_ROOMS: RoomLayout[] = [
     name: 'Amphi 1',
     seats: [
       ...generateAmphiBlock('amphi1', 'bloc1'),
-      ...generateAmphiBlock('amphi1', 'bloc2'),
-      ...bonusSeats('amphi1', 8)
+      ...generateAmphiBlock('amphi1', 'bloc2')
     ]
   },
   {
@@ -95,13 +80,17 @@ export const INITIAL_ROOMS: RoomLayout[] = [
     name: 'Amphi 2',
     seats: [
       ...generateAmphiBlock('amphi2', 'bloc1'),
-      ...generateAmphiBlock('amphi2', 'bloc2'),
-      ...bonusSeats('amphi2', 8)
+      ...generateAmphiBlock('amphi2', 'bloc2')
     ]
   },
   {
     id: 'polyvalente',
     name: 'Salle Polyvalente',
     seats: generateSeats('poly', 7, 4)
+  },
+  {
+    id: 'bibliotheque',
+    name: 'Salle Bibliothèque',
+    seats: generateSeats('bib', 9, 4)
   }
 ];
