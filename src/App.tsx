@@ -766,7 +766,7 @@ export default function App() {
               }`}
             >
               <span className="text-sm font-bold truncate">{room.name}</span>
-              <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-300 ml-2 shrink-0">{room.seats.filter(s => s.isActive && !s.isHidden).length}</span>
+              <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 ml-2 shrink-0">{room.seats.filter(s => s.isActive && !s.isHidden).length}</span>
             </button>
           ))}
           
@@ -827,8 +827,13 @@ export default function App() {
               <div>
                 <h2 className="text-5xl font-black uppercase tracking-tighter italic text-[var(--text-primary)] flex items-baseline gap-4 transition-colors duration-300">
                   {activeRoom.name}
-                  <span className="text-base font-mono font-medium not-italic text-[var(--text-secondary)] tracking-normal lowercase opacity-80 decoration-indigo-500/30 underline underline-offset-4">
-                    {activeRoom.seats.filter(s => s.isActive && !s.isHidden).length} / {activeRoom.seats.filter(s => !s.isHidden).length} unités
+                  <span className="text-base font-mono font-black not-italic tracking-normal lowercase underline decoration-indigo-500/30 underline-offset-4">
+                    <span className="text-emerald-600 dark:text-emerald-400 drop-shadow-[0_0_3px_rgba(16,185,129,0.5)] dark:drop-shadow-[0_0_5px_rgba(52,211,153,0.6)]">
+                      {activeRoom.seats.filter(s => s.isActive && !s.isHidden).length}
+                    </span>
+                    <span className="text-indigo-600 dark:text-indigo-400 drop-shadow-[0_0_3px_rgba(99,102,241,0.5)] dark:drop-shadow-[0_0_5px_rgba(129,140,248,0.6)]">
+                      {" "}/ {activeRoom.seats.filter(s => !s.isHidden).length} unités
+                    </span>
                   </span>
                   {isEditMode && rooms.length > 1 && (
                     <button onClick={() => removeRoom(activeRoom.id)} className="ml-4 p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors">
