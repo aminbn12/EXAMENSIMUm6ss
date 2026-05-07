@@ -15,7 +15,10 @@ import {
   Moon,
   Download,
   Upload,
-  Edit3
+  Edit3,
+  CheckSquare,
+  Grid,
+  Shuffle
 } from 'lucide-react';
 import { INITIAL_ROOMS } from './constants';
 import { RoomLayout, Seat, SavedProposal } from './types';
@@ -119,6 +122,8 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [magnifierEnabled, setMagnifierEnabled] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [isAlternating, setIsAlternating] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -199,6 +204,74 @@ export default function App() {
               return { ...seat, isHidden: !seat.isHidden };
             }
             return { ...seat, isActive: !seat.isActive };
+          }
+          return seat;
+        })
+      };
+    }));
+  };
+
+  const toggleRow = (roomId: string, blockId: string, row: number) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats
+        .filter(s => s.blockId === blockId && s.row === row && !s.isHidden)
+        .sort((a, b) => a.col - b.col);
+      
+      if (isAlternating) {
+        const alreadyPattern1 = blockSeats.every((s, i) => s.isActive === (i % 2 === 0));
+        return {
+          ...room,
+          seats: room.seats.map(seat => {
+            if (seat.blockId === blockId && seat.row === row && !seat.isHidden) {
+              const idx = blockSeats.findIndex(s => s.id === seat.id);
+              return { ...seat, isActive: alreadyPattern1 ? (idx % 2 !== 0) : (idx % 2 === 0) };
+            }
+            return seat;
+          })
+        };
+      }
+
+      const allActive = blockSeats.every(s => s.isActive);
+      return {
+        ...room,
+        seats: room.seats.map(seat => {
+          if (seat.blockId === blockId && seat.row === row && !seat.isHidden) {
+            return { ...seat, isActive: !allActive };
+          }
+          return seat;
+        })
+      };
+    }));
+  };
+
+  const toggleCol = (roomId: string, blockId: string, col: number) => {
+    setRooms(prevRooms => prevRooms.map(room => {
+      if (room.id !== roomId) return room;
+      const blockSeats = room.seats
+        .filter(s => s.blockId === blockId && s.col === col && !s.isHidden)
+        .sort((a, b) => a.row - b.row);
+
+      if (isAlternating) {
+        const alreadyPattern1 = blockSeats.every((s, i) => s.isActive === (i % 2 === 0));
+        return {
+          ...room,
+          seats: room.seats.map(seat => {
+            if (seat.blockId === blockId && seat.col === col && !seat.isHidden) {
+              const idx = blockSeats.findIndex(s => s.id === seat.id);
+              return { ...seat, isActive: alreadyPattern1 ? (idx % 2 !== 0) : (idx % 2 === 0) };
+            }
+            return seat;
+          })
+        };
+      }
+
+      const allActive = blockSeats.every(s => s.isActive);
+      return {
+        ...room,
+        seats: room.seats.map(seat => {
+          if (seat.blockId === blockId && seat.col === col && !seat.isHidden) {
+            return { ...seat, isActive: !allActive };
           }
           return seat;
         })
@@ -561,41 +634,79 @@ export default function App() {
               </div>
             )
           )}
-          <div className="flex gap-3">
-            <div className="flex flex-col gap-[6px] pt-[5px]">
-              {rows.map(r => (
-                <div key={r} className="h-5 flex items-center text-[9px] font-mono font-bold text-[var(--text-secondary)] pr-1 border-r border-[var(--border-color)]">
-                  {r >= 0 ? `R${r + 1}` : ''}
-                </div>
-              ))}
-            </div>
-            <div 
-              className="grid gap-[6px]"
-              style={{ 
-                gridTemplateColumns: `repeat(${Math.max(cols, maxCol)}, min-content)`,
-                gridAutoRows: '1.25rem'
-              }}
-            >
-              {seats.map(seat => {
-                if (seat.isHidden && !isEditMode) return null;
-                const seatNumber = (!seat.isHidden && seat.isActive) ? seatNumbers.get(seat.id) : undefined;
-                return (
-                  <div 
-                    key={seat.id} 
-                    className={`relative ${seat.isHidden ? 'opacity-30 grayscale scale-90' : ''}`}
-                    style={{ gridColumnStart: seat.col + 1, gridRowStart: rows.indexOf(seat.row) + 1 }}
-                    data-seat-number={seatNumber ?? undefined}
-                  >
-                    {seatNumber && (
-                      <span className="absolute -top-1 -left-1 text-[8px] font-mono font-black text-white bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow shadow-indigo-500/40 z-10">
-                        {seatNumber}
-                      </span>
-                    )}
-                    <SeatBox seat={seat} onClick={() => toggleSeat(room.id, seat.id)} />
+          <div 
+            className="grid gap-x-[10px] gap-y-[6px] items-center"
+            style={{ 
+              gridTemplateColumns: `min-content repeat(${Math.max(cols, maxCol)}, min-content)`,
+            }}
+          >
+            {/* Column Toggle Buttons */}
+            {isBatchMode && blockId && (
+              <>
+                <div /> {/* Top-left corner */}
+                {Array.from({ length: Math.max(cols, maxCol) }).map((_, c) => (
+                  <div key={`col-toggle-${c}`} className="flex justify-center">
+                    <button
+                      onClick={() => toggleCol(room.id, blockId, c)}
+                      className="w-5 h-4 rounded bg-emerald-500/20 hover:bg-emerald-500 text-[10px] flex items-center justify-center text-white transition-colors"
+                      title="Sélectionner colonne"
+                    >
+                      ✓
+                    </button>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </>
+            )}
+
+            {/* Row Headers (Labels + Toggles) */}
+            {rows.map((r, rowIndex) => (
+              <div 
+                key={`row-header-${r}`} 
+                className="flex items-center gap-2 pr-2 border-r border-[var(--border-color)] h-5"
+                style={{ 
+                  gridColumn: 1, 
+                  gridRow: rowIndex + (isBatchMode ? 2 : 1) 
+                }}
+              >
+                {isBatchMode && blockId && (
+                  <button 
+                    onClick={() => toggleRow(room.id, blockId, r)}
+                    className="w-4 h-4 rounded bg-indigo-500/20 hover:bg-indigo-500 text-[10px] flex items-center justify-center text-white transition-colors shrink-0"
+                    title="Sélectionner ligne"
+                  >
+                    ✓
+                  </button>
+                )}
+                <span className="text-[9px] font-mono font-bold text-[var(--text-secondary)] whitespace-nowrap">
+                  {r >= 0 ? `R${r + 1}` : ''}
+                </span>
+              </div>
+            ))}
+
+            {/* Seats */}
+            {seats.map(seat => {
+              if (seat.isHidden && !isEditMode) return null;
+              const seatNumber = (!seat.isHidden && seat.isActive) ? seatNumbers.get(seat.id) : undefined;
+              const rowIndex = rows.indexOf(seat.row);
+              return (
+                <div 
+                  key={seat.id} 
+                  className={`relative ${seat.isHidden ? 'opacity-30 grayscale scale-90' : ''}`}
+                  style={{ 
+                    gridColumn: seat.col + 2, 
+                    gridRow: rowIndex + (isBatchMode ? 2 : 1) 
+                  }}
+                  data-seat-number={seatNumber ?? undefined}
+                >
+                  {seatNumber && (
+                    <span className="absolute -top-1 -left-1 text-[8px] font-mono font-black text-white bg-indigo-600 rounded-full w-4 h-4 flex items-center justify-center shadow shadow-indigo-500/40 z-10">
+                      {seatNumber}
+                    </span>
+                  )}
+                  <SeatBox seat={seat} onClick={() => toggleSeat(room.id, seat.id)} />
+                </div>
+              );
+            })}
           </div>
         </div>
       );
@@ -842,7 +953,25 @@ export default function App() {
                   )}
                 </h2>
               </div>
-              <div className="flex gap-2">
+
+              <div className="flex gap-2 mb-1">
+                <button 
+                  onClick={() => setIsBatchMode(!isBatchMode)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${isBatchMode ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
+                >
+                  <CheckSquare className="w-4 h-4" /> {isBatchMode ? 'Batch: On' : 'Batch: Off'}
+                </button>
+
+                {isBatchMode && (
+                  <button 
+                    onClick={() => setIsAlternating(!isAlternating)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${isAlternating ? 'bg-amber-500 border-amber-400 text-white shadow-lg shadow-amber-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
+                  >
+                    <Shuffle className="w-4 h-4" /> {isAlternating ? 'Saut: On' : 'Saut: Off'}
+                  </button>
+                )}
+
+                <div className="w-px h-10 bg-[var(--border-color)] mx-2 opacity-30" />
                 <button 
                   onClick={() => setAllSeats(activeRoom.id, true)}
                   className="px-5 py-2.5 bg-[var(--btn-secondary-bg)] border border-[var(--border-color)] rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--btn-secondary-text)] hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 dark:hover:text-white hover:border-indigo-200 transition-all shadow-sm active:scale-95"
