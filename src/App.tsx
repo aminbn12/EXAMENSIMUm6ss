@@ -18,16 +18,21 @@ import {
   Edit3,
   CheckSquare,
   Grid,
-  Shuffle
+  Shuffle,
+  Menu,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { INITIAL_ROOMS } from './constants';
 import { RoomLayout, Seat, SavedProposal } from './types';
+import DEFAULT_PROPOSALS from './proposals.json';
 
 // Help component to auto-scale content to fit parent
 const FitContainer = ({ children }: { children: React.ReactNode }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const [isOverflowing, setIsOverflowing] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -36,7 +41,7 @@ const FitContainer = ({ children }: { children: React.ReactNode }) => {
       const container = containerRef.current;
       const content = contentRef.current;
       
-      const padding = 20; // Maintain margin around scaled content
+      const padding = window.innerWidth < 768 ? 10 : 40; 
       const availableWidth = container.offsetWidth - padding;
       const availableHeight = container.offsetHeight - padding;
       
@@ -46,31 +51,42 @@ const FitContainer = ({ children }: { children: React.ReactNode }) => {
       const scaleX = availableWidth / contentWidth;
       const scaleY = availableHeight / contentHeight;
       
-      const newScale = Math.min(scaleX, scaleY, 4.0); // Allow much larger maximum scale for small blocks
-      setScale(newScale);
+      // On small screens or limited space, we prioritize width and allow vertical scroll if needed
+      // but only if the vertical scale would be too aggressive (< 0.6)
+      let newScale = Math.min(scaleX, scaleY, 4.0);
+      
+      if (newScale < 0.6 && scaleX > 0.6) {
+        newScale = scaleX;
+        setIsOverflowing(true);
+      } else {
+        setIsOverflowing(false);
+      }
+      
+      setScale(Math.max(newScale, 0.3)); // Don't go below 0.3
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
     if (containerRef.current) resizeObserver.observe(containerRef.current);
     if (contentRef.current) resizeObserver.observe(contentRef.current);
     
-    // Initial calculation with a slight delay to ensure layout is ready
-    const timer = setTimeout(handleResize, 50);
+    window.addEventListener('resize', handleResize);
+    const timer = setTimeout(handleResize, 100);
     
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener('resize', handleResize);
       clearTimeout(timer);
     };
   }, [children]);
 
   return (
-    <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden">
+    <div ref={containerRef} className={`w-full h-full flex justify-center ${isOverflowing ? 'overflow-y-auto pt-10 pb-20' : 'items-center overflow-hidden'}`}>
       <div 
         ref={contentRef} 
         style={{ 
           transform: `scale(${scale})`,
-          transformOrigin: 'center center',
-          transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+          transformOrigin: isOverflowing ? 'top center' : 'center center',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
         }}
         className="inline-block"
       >
@@ -125,6 +141,7 @@ export default function App() {
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [isAlternating, setIsAlternating] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -170,16 +187,30 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Load proposals from localStorage on mount
+  // Load proposals from localStorage and merge with defaults on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem('exam_proposals');
+      let currentProposals: SavedProposal[] = [];
       if (saved) {
-        setProposals(JSON.parse(saved));
+        currentProposals = JSON.parse(saved);
+      }
+      
+      // Filter defaults to only include those not already in currentProposals
+      const existingIds = new Set(currentProposals.map(p => p.id));
+      const newFromDefaults = (DEFAULT_PROPOSALS as SavedProposal[]).filter(p => !existingIds.has(p.id));
+      
+      if (newFromDefaults.length > 0) {
+        // We put defaults first if they are new, or merge them
+        const merged = [...newFromDefaults, ...currentProposals];
+        setProposals(merged);
+        localStorage.setItem('exam_proposals', JSON.stringify(merged));
+      } else {
+        setProposals(currentProposals);
       }
     } catch (err) {
-      console.error('Failed to load proposals from localStorage:', err);
-      localStorage.removeItem('exam_proposals');
+      console.error('Failed to load proposals:', err);
+      setProposals(DEFAULT_PROPOSALS as SavedProposal[]);
     }
   }, []);
 
@@ -764,30 +795,47 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Header & Global Stats */}
-      <header className="bg-[var(--bg-header)] border-[var(--nav-border)] border-b px-8 py-5 shrink-0 shadow-sm z-20 transition-colors duration-300">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-500/30">
-              <Layout className="w-6 h-6 text-white" />
+      <header className="bg-[var(--bg-header)] border-[var(--nav-border)] border-b px-4 sm:px-8 py-4 sm:py-5 shrink-0 shadow-sm z-30 transition-colors duration-300">
+        <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
+          <div className="flex items-center justify-between w-full lg:w-auto gap-5">
+            <div className="flex items-center gap-3 sm:gap-5">
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="lg:hidden p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)] drop-shadow-[0_0_5px_rgba(99,102,241,0.5)] transition-all"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="bg-indigo-600 p-2 sm:p-3 rounded-xl sm:2xl shadow-lg shadow-indigo-500/30">
+                <Layout className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:2xl font-black italic tracking-tighter text-[var(--nav-text-primary)]">EXAMENSIM <span className="text-indigo-600 non-italic">PRO</span></h1>
+                <p className="text-[8px] sm:text-[10px] text-[var(--nav-text-secondary)] font-black uppercase tracking-widest mt-0.5">Planning & Capacité</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black italic tracking-tighter text-[var(--nav-text-primary)]">EXAMENSIM <span className="text-indigo-600 non-italic">PRO</span></h1>
-              <p className="text-[10px] text-[var(--nav-text-secondary)] font-black uppercase tracking-widest mt-0.5">Planning & Capacité</p>
+
+            <div className="lg:hidden flex gap-2">
+              <button 
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="p-2 rounded-xl bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white transition-all"
+              >
+                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
           <div className="flex gap-2 inline-flex bg-[var(--nav-btn-bg)] p-1 rounded-2xl border border-[var(--nav-border)] shadow-sm">
-            <div className="px-6 py-2 text-center rounded-xl bg-[var(--nav-card-bg)] shadow-sm border border-[var(--nav-border)]/30">
-              <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--nav-text-secondary)] font-bold mb-1">Capacité Totale</p>
-              <p className="text-2xl font-mono font-black text-indigo-600 dark:text-indigo-400 leading-none">{stats.totalPossible}</p>
+            <div className="px-4 sm:px-6 py-1.5 sm:py-2 text-center rounded-xl bg-[var(--nav-card-bg)] shadow-sm border border-[var(--nav-border)]/30">
+              <p className="text-[8px] sm:text-[9px] uppercase tracking-[0.2em] text-[var(--nav-text-secondary)] font-bold mb-1">Total</p>
+              <p className="text-xl sm:text-2xl font-mono font-black text-indigo-600 dark:text-indigo-400 leading-none">{stats.totalPossible}</p>
             </div>
-            <div className="px-6 py-2 text-center rounded-xl bg-[var(--nav-card-bg)] shadow-sm border border-[var(--nav-border)]/30">
-              <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--nav-text-secondary)] font-bold mb-1">Places Actives</p>
-              <p className="text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400 leading-none">{stats.totalCapacity}</p>
+            <div className="px-4 sm:px-6 py-1.5 sm:py-2 text-center rounded-xl bg-[var(--nav-card-bg)] shadow-sm border border-[var(--nav-border)]/30">
+              <p className="text-[8px] sm:text-[9px] uppercase tracking-[0.2em] text-[var(--nav-text-secondary)] font-bold mb-1">Actives</p>
+              <p className="text-xl sm:text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400 leading-none">{stats.totalCapacity}</p>
             </div>
           </div>
 
-          <div className="flex gap-3 items-center">
+          <div className="hidden lg:flex gap-3 items-center">
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 rounded-xl bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white transition-all"
@@ -864,81 +912,119 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 overflow-hidden">
+      <main className="flex flex-1 overflow-hidden relative">
         {/* Navigation Rail */}
-        <nav className="w-72 bg-[var(--bg-sidebar)] border-[var(--nav-border)] border-r p-4 flex flex-col gap-1 overflow-y-auto shrink-0 shadow-2xl z-10 scrollbar-none">
-          <p className="text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.3em] mb-4 mt-2 px-2">Salles Disponibles</p>
+        <nav className={`
+          ${isSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full lg:translate-x-0 lg:w-20'} 
+          fixed lg:relative h-full bg-[var(--bg-sidebar)] border-[var(--nav-border)] border-r p-4 flex flex-col gap-1 overflow-y-auto shrink-0 shadow-2xl z-40 transition-all duration-300 scrollbar-none
+        `}>
+          <div className="flex items-center justify-between mb-4 mt-2 px-2">
+            <p className={`text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.3em] ${!isSidebarOpen && 'lg:hidden'}`}>Salles</p>
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="hidden lg:flex p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)] drop-shadow-[0_0_5px_rgba(99,102,241,0.5)] hover:bg-indigo-500/20 hover:text-indigo-300 transition-all"
+            >
+              {isSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            <button 
+              onClick={() => setIsSidebarOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white transition-all"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+          </div>
+
           {rooms.map(room => (
             <button
               key={room.id}
-              onClick={() => setActiveRoomId(room.id)}
+              onClick={() => {
+                setActiveRoomId(room.id);
+                if (window.innerWidth < 1024) setIsSidebarOpen(false);
+              }}
               className={`room-nav-btn ${
                 activeRoomId === room.id ? 'room-nav-btn-active' : 'room-nav-btn-inactive'
-              }`}
+              } ${!isSidebarOpen && 'lg:px-0 lg:justify-center'}`}
+              title={!isSidebarOpen ? room.name : ''}
             >
-              <span className="text-sm font-bold truncate">{room.name}</span>
-              <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 ml-2 shrink-0">{room.seats.filter(s => s.isActive && !s.isHidden).length}</span>
+              <span className={`text-sm font-bold truncate ${!isSidebarOpen && 'lg:hidden'}`}>{room.name}</span>
+              {isSidebarOpen ? (
+                <span className="text-[10px] font-mono font-black px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 ml-2 shrink-0">{room.seats.filter(s => s.isActive && !s.isHidden).length}</span>
+              ) : (
+                <span className="hidden lg:flex text-[10px] font-mono font-black">{room.name.substring(0, 2).toUpperCase()}</span>
+              )}
             </button>
           ))}
           
           {isEditMode && (
             <button 
               onClick={addRoom}
-              className="mt-2 w-full text-center py-3 border border-dashed border-[var(--nav-border)] rounded-xl text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:bg-[var(--nav-btn-bg)] hover:text-white transition-all"
+              className={`mt-2 w-full text-center py-3 border border-dashed border-[var(--nav-border)] rounded-xl text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:bg-[var(--nav-btn-bg)] hover:text-white transition-all ${!isSidebarOpen && 'lg:px-0'}`}
             >
-              + Nouvelle Salle
+              {isSidebarOpen ? '+ Nouvelle Salle' : '+'}
             </button>
           )}
 
           <div className="mt-8 pt-8 border-t border-[var(--nav-border)]">
-            <p className="text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.3em] mb-4 px-2">Historique Récent</p>
+            <p className={`text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.3em] mb-4 px-2 ${!isSidebarOpen && 'lg:hidden'}`}>Historique</p>
             <div className="space-y-2 px-2">
               {proposals.slice(0, 5).map(p => (
                 <div key={p.id} className="group relative">
                   <button
-                    onClick={() => loadProposal(p)}
-                    className="w-full text-left p-3 bg-[var(--nav-card-bg)] rounded-xl border border-[var(--nav-border)] hover:border-indigo-500/50 transition-all"
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-xs font-bold text-[var(--nav-text-primary)] truncate pr-6">{p.name}</span>
-                      <span className="text-[9px] font-mono font-bold text-indigo-400 shrink-0">
-                        {Object.values(p.roomData).flat().filter(v => v).length}p
-                      </span>
-                    </div>
-                    <span className="text-[9px] text-[var(--nav-text-secondary)] block">{p.timestamp}</span>
-                  </button>
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteProposal(p.id);
+                    onClick={() => {
+                      loadProposal(p);
+                      if (window.innerWidth < 1024) setIsSidebarOpen(false);
                     }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-400/10 rounded-lg"
-                    title="Supprimer"
+                    className={`w-full text-left p-3 bg-[var(--nav-card-bg)] rounded-xl border border-[var(--nav-border)] hover:border-indigo-500/50 transition-all ${!isSidebarOpen && 'lg:p-2 lg:flex lg:justify-center'}`}
+                    title={!isSidebarOpen ? p.name : ''}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    {isSidebarOpen ? (
+                      <>
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-xs font-bold text-[var(--nav-text-primary)] truncate pr-6">{p.name}</span>
+                          <span className="text-[9px] font-mono font-bold text-indigo-400 shrink-0">
+                            {Object.values(p.roomData).flat().filter(v => v).length}p
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-[var(--nav-text-secondary)] block">{p.timestamp}</span>
+                      </>
+                    ) : (
+                      <FolderOpen className="w-4 h-4 text-indigo-400" />
+                    )}
                   </button>
+                  {isSidebarOpen && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteProposal(p.id);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-400/10 rounded-lg"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               ))}
-              {proposals.length > 5 && (
-                <button 
-                  onClick={() => setShowSaved(true)}
-                  className="w-full text-center py-2 text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:text-white transition-colors"
-                >
-                  Voir tout l'historique
-                </button>
-              )}
             </div>
           </div>
         </nav>
 
+        {/* Backdrop for mobile sidebar */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+
         {/* Viewport */}
-        <section className="flex-1 p-2 sm:p-4 relative flex flex-col overflow-hidden">
+        <section className="flex-1 p-2 sm:p-6 relative flex flex-col overflow-hidden bg-[var(--bg-main)]">
           <div className="w-full h-full flex flex-col mx-auto max-w-[1600px]">
-            <div className="flex justify-between items-end mb-4 border-[var(--border-color)] border-b pb-4 shrink-0 transition-colors duration-300">
+            <div className="flex flex-col xl:flex-row xl:items-end justify-between mb-4 border-[var(--border-color)] border-b pb-4 shrink-0 transition-colors duration-300 gap-4">
               <div>
-                <h2 className="text-5xl font-black uppercase tracking-tighter italic text-[var(--text-primary)] flex items-baseline gap-4 transition-colors duration-300">
+                <h2 className="text-3xl sm:text-5xl font-black uppercase tracking-tighter italic text-[var(--text-primary)] flex items-baseline flex-wrap gap-2 sm:gap-4 transition-colors duration-300">
                   {activeRoom.name}
-                  <span className="text-base font-mono font-black not-italic tracking-normal lowercase underline decoration-indigo-500/30 underline-offset-4">
+                  <span className="text-xs sm:text-base font-mono font-black not-italic tracking-normal lowercase underline decoration-indigo-500/30 underline-offset-4">
                     <span className="text-emerald-600 dark:text-emerald-400 drop-shadow-[0_0_3px_rgba(16,185,129,0.5)] dark:drop-shadow-[0_0_5px_rgba(52,211,153,0.6)]">
                       {activeRoom.seats.filter(s => s.isActive && !s.isHidden).length}
                     </span>
@@ -947,47 +1033,47 @@ export default function App() {
                     </span>
                   </span>
                   {isEditMode && rooms.length > 1 && (
-                    <button onClick={() => removeRoom(activeRoom.id)} className="ml-4 p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors">
-                      <Trash2 className="w-5 h-5" />
+                    <button onClick={() => removeRoom(activeRoom.id)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-colors">
+                      <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                   )}
                 </h2>
               </div>
 
-              <div className="flex gap-2 mb-1">
+              <div className="flex flex-wrap gap-2 mb-1">
                 <button 
                   onClick={() => setIsBatchMode(!isBatchMode)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${isBatchMode ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
+                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${isBatchMode ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
                 >
-                  <CheckSquare className="w-4 h-4" /> {isBatchMode ? 'Batch: On' : 'Batch: Off'}
+                  <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {isBatchMode ? 'Batch: On' : 'Batch: Off'}
                 </button>
 
                 {isBatchMode && (
                   <button 
                     onClick={() => setIsAlternating(!isAlternating)}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${isAlternating ? 'bg-amber-500 border-amber-400 text-white shadow-lg shadow-amber-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${isAlternating ? 'bg-amber-500 border-amber-400 text-white shadow-lg shadow-amber-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
                   >
-                    <Shuffle className="w-4 h-4" /> {isAlternating ? 'Saut: On' : 'Saut: Off'}
+                    <Shuffle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {isAlternating ? 'Saut: On' : 'Saut: Off'}
                   </button>
                 )}
 
-                <div className="w-px h-10 bg-[var(--border-color)] mx-2 opacity-30" />
+                <div className="hidden sm:block w-px h-10 bg-[var(--border-color)] mx-2 opacity-30" />
                 <button 
                   onClick={() => setAllSeats(activeRoom.id, true)}
-                  className="px-5 py-2.5 bg-[var(--btn-secondary-bg)] border border-[var(--border-color)] rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--btn-secondary-text)] hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 dark:hover:text-white hover:border-indigo-200 transition-all shadow-sm active:scale-95"
+                  className="px-3 sm:px-5 py-2 sm:py-2.5 bg-[var(--btn-secondary-bg)] border border-[var(--border-color)] rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--btn-secondary-text)] hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 dark:hover:text-white hover:border-indigo-200 transition-all shadow-sm active:scale-95"
                 >
-                  Tout Activer
+                  Activer Tout
                 </button>
                 <button 
                   onClick={() => setAllSeats(activeRoom.id, false)}
-                  className="px-5 py-2.5 bg-[var(--btn-secondary-bg)] border border-[var(--border-color)] rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--btn-secondary-text)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-slate-700 dark:hover:text-white hover:border-red-200 transition-all shadow-sm active:scale-95"
+                  className="px-3 sm:px-5 py-2 sm:py-2.5 bg-[var(--btn-secondary-bg)] border border-[var(--border-color)] rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--btn-secondary-text)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-slate-700 dark:hover:text-white hover:border-red-200 transition-all shadow-sm active:scale-95"
                 >
-                  Tout Désactiver
+                  Désactiver Tout
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 border-[var(--border-color)] bg-[var(--card-bg)] rounded-[2.5rem] p-8 flex flex-col items-center justify-center overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors duration-300 relative group">
+            <div className="flex-1 border-[var(--border-color)] bg-[var(--card-bg)] rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-8 flex flex-col items-center justify-center overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors duration-300 relative group">
               {/* Subtle grid background for the room container in light mode */}
               <div className="absolute inset-0 opacity-[0.03] dark:hidden pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '24px 24px' }} />
               
