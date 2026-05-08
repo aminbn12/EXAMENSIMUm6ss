@@ -21,7 +21,9 @@ import {
   Shuffle,
   Menu,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Settings,
+  MoreVertical
 } from 'lucide-react';
 import { INITIAL_ROOMS } from './constants';
 import { RoomLayout, Seat, SavedProposal } from './types';
@@ -142,6 +144,7 @@ export default function App() {
   const [isAlternating, setIsAlternating] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
+  const [showMobileActions, setShowMobileActions] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -816,6 +819,13 @@ export default function App() {
 
             <div className="lg:hidden flex gap-2">
               <button 
+                onClick={() => setShowMobileActions(!showMobileActions)}
+                className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)] drop-shadow-[0_0_5px_rgba(99,102,241,0.5)] transition-all"
+                title="Options"
+              >
+                <Settings className={`w-5 h-5 transition-transform duration-500 ${showMobileActions ? 'rotate-90' : ''}`} />
+              </button>
+              <button 
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 className="p-2 rounded-xl bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white transition-all"
               >
@@ -910,6 +920,98 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Mobile Actions Dropdown */}
+      <AnimatePresence>
+        {showMobileActions && (
+          <div className="fixed inset-0 z-[60] lg:hidden">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMobileActions(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="absolute top-20 right-4 w-72 bg-[var(--bg-header)] border border-[var(--nav-border)] rounded-2xl shadow-2xl p-4 flex flex-col gap-3 z-50"
+            >
+              <p className="text-[10px] font-black text-[var(--nav-text-secondary)] uppercase tracking-[0.2em] px-2 mb-1">Actions & Paramètres</p>
+              
+              <button 
+                onClick={() => { setIsEditMode(!isEditMode); setShowMobileActions(false); }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-xs font-black uppercase tracking-widest transition-all ${isEditMode ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-[var(--nav-btn-bg)] border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white'}`}
+              >
+                <Edit3 className="w-4 h-4" /> {isEditMode ? 'Terminer' : 'Éditer'}
+              </button>
+
+              <button 
+                onClick={() => { setShowSaved(true); setShowMobileActions(false); }}
+                className="flex items-center gap-3 px-4 py-3 bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] rounded-xl text-xs font-black uppercase tracking-widest text-[var(--nav-text-secondary)] hover:text-white transition-colors"
+              >
+                <FolderOpen className="w-4 h-4" /> Historique
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => { exportToJson(); setShowMobileActions(false); }}
+                  className="flex items-center justify-center gap-2 py-3 bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] rounded-xl text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:text-indigo-400 transition-all"
+                >
+                  <Download className="w-4 h-4" /> Exporter
+                </button>
+                <label className="flex items-center justify-center gap-2 py-3 bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] rounded-xl text-[10px] font-black uppercase text-[var(--nav-text-secondary)] hover:text-emerald-400 transition-all cursor-pointer">
+                  <Upload className="w-4 h-4" /> Importer
+                  <input type="file" accept=".json" onChange={importFromJson} className="hidden" />
+                </label>
+              </div>
+
+              <div className="h-px bg-[var(--nav-border)] my-1" />
+
+              <div className="flex flex-col gap-2">
+                <div className="flex bg-[var(--nav-btn-bg)] p-1 rounded-xl border border-[var(--nav-border)]">
+                  <input 
+                    type="text" 
+                    placeholder="Nom prop..."
+                    className="bg-transparent px-3 py-2 text-xs focus:outline-none flex-1 font-medium text-[var(--nav-text-primary)] placeholder-[var(--nav-text-secondary)]"
+                    value={proposalName}
+                    onChange={(e) => setProposalName(e.target.value)}
+                  />
+                  <button 
+                    onClick={() => { handleSaveProposal(); setShowMobileActions(false); }}
+                    disabled={!proposalName.trim()}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all disabled:opacity-30"
+                  >
+                    OK
+                  </button>
+                </div>
+                <button 
+                  onClick={() => { handleNewProposal(); setShowMobileActions(false); }}
+                  className="w-full py-3 text-xs font-black uppercase tracking-widest text-indigo-400 border border-indigo-500/20 bg-indigo-500/5 rounded-xl transition-all"
+                >
+                  + Nouveau Planning
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between px-3 py-3 border border-[var(--nav-border)] rounded-xl bg-[var(--nav-btn-bg)] mt-1">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="magnifier-toggle-mobile"
+                    checked={magnifierEnabled}
+                    onChange={(e) => setMagnifierEnabled(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 rounded"
+                  />
+                  <label htmlFor="magnifier-toggle-mobile" className="text-xs font-bold text-[var(--nav-text-secondary)]">
+                    Activer Loupe
+                  </label>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <main className="flex flex-1 overflow-hidden relative">
@@ -1119,7 +1221,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-[var(--bg-header)] rounded-3xl shadow-2xl border border-[var(--border-color)] overflow-hidden transition-colors duration-300"
+              className="relative w-full max-w-2xl bg-[var(--card-bg)] rounded-3xl shadow-2xl border border-[var(--border-color)] overflow-hidden transition-colors duration-300"
             >
               <div className="p-6 border-b border-[var(--border-color)] flex items-center justify-between">
                 <h3 className="text-xl font-black uppercase italic tracking-tight text-[var(--text-primary)]">Configurations Archivées</h3>
@@ -1129,12 +1231,12 @@ export default function App() {
               </div>
               <div className="max-h-[60vh] overflow-y-auto p-6 space-y-3 bg-[var(--bg-main)] transition-colors duration-300">
                 {proposals.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 bg-[var(--bg-sidebar)] rounded-2xl border border-[var(--border-color)] border-dashed">
+                  <div className="text-center py-12 text-slate-500 bg-[var(--bg-main)] rounded-2xl border border-[var(--border-color)] border-dashed">
                     <p className="text-xs uppercase font-black tracking-widest">Aucune donnée archivée</p>
                   </div>
                 ) : (
                   proposals.map(p => (
-                    <div key={p.id} className="group p-4 bg-[var(--bg-header)] rounded-2xl border border-[var(--border-color)] flex items-center justify-between hover:border-indigo-500/30 transition-all">
+                    <div key={p.id} className="group p-4 bg-[var(--card-bg)] rounded-2xl border border-[var(--border-color)] flex items-center justify-between hover:border-indigo-500/30 transition-all shadow-sm">
                       <div>
                         <h4 className="font-bold text-[var(--text-primary)]">{p.name}</h4>
                         <p className="text-[10px] font-mono text-[var(--text-secondary)]">{p.timestamp}</p>
