@@ -25,7 +25,8 @@ import {
   ChevronUp,
   ChevronDown,
   Settings,
-  MoreVertical
+  MoreVertical,
+  Search
 } from 'lucide-react';
 import { INITIAL_ROOMS } from './constants';
 import { RoomLayout, Seat, SavedProposal } from './types';
@@ -938,18 +939,7 @@ export default function App() {
               </button>
             </div>
             
-            <div className="flex items-center gap-2 px-3 py-1.5 border border-[var(--nav-border)] rounded-lg bg-[var(--nav-btn-bg)]">
-              <input
-                type="checkbox"
-                id="magnifier-toggle"
-                checked={magnifierEnabled}
-                onChange={(e) => setMagnifierEnabled(e.target.checked)}
-                className="w-4 h-4 text-indigo-600 rounded"
-              />
-              <label htmlFor="magnifier-toggle" className="text-xs font-bold text-[var(--nav-text-secondary)] cursor-pointer select-none hover:text-white transition-colors">
-                Loupe
-              </label>
-            </div>
+
           </div>
         </div>
       </motion.header>
@@ -1178,6 +1168,13 @@ export default function App() {
               </div>
 
               <div className="flex flex-wrap gap-2 mb-1">
+                <button 
+                  onClick={() => setMagnifierEnabled(!magnifierEnabled)}
+                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${magnifierEnabled ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
+                >
+                  <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {magnifierEnabled ? 'Loupe: On' : 'Loupe: Off'}
+                </button>
+
                 <button 
                   onClick={() => setIsBatchMode(!isBatchMode)}
                   className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${isBatchMode ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-[var(--btn-secondary-bg)] border-[var(--border-color)] text-[var(--btn-secondary-text)] hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-slate-700 dark:hover:text-white'}`}
