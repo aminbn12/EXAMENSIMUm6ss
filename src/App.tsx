@@ -825,7 +825,7 @@ export default function App() {
             transition={{ duration: 0.3, ease: 'easeInOut' }}
             className="bg-[var(--bg-header)] border-[var(--nav-border)] border-b px-4 sm:px-8 py-4 sm:py-5 shrink-0 shadow-sm z-30 transition-colors duration-300 overflow-hidden"
           >
-        <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
+        <div className="max-w-full mx-auto flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6 px-4 sm:px-8">
           <div className="flex items-center justify-between w-full lg:w-auto gap-5">
             <div className="flex items-center gap-3 sm:gap-5">
               <button 
@@ -1146,7 +1146,7 @@ export default function App() {
 
         {/* Viewport */}
         <section className="flex-1 p-2 sm:p-6 relative flex flex-col overflow-hidden bg-[var(--bg-main)]">
-          <div className="w-full h-full flex flex-col mx-auto max-w-[1600px]">
+          <div className="w-full h-full flex flex-col mx-auto max-w-full">
             <div className="flex flex-col xl:flex-row xl:items-end justify-between mb-4 border-[var(--border-color)] border-b pb-4 shrink-0 transition-colors duration-300 gap-4">
               <div>
                 <h2 className="text-3xl sm:text-5xl font-black uppercase tracking-tighter italic text-[var(--text-primary)] flex items-baseline flex-wrap gap-2 sm:gap-4 transition-colors duration-300">
@@ -1207,7 +1207,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex-1 border-[var(--border-color)] bg-[var(--card-bg)] rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-8 flex flex-col items-center justify-center overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors duration-300 relative group">
+            <div className="flex-1 border-[var(--border-color)] bg-[var(--card-bg)] rounded-2xl sm:rounded-[2.5rem] p-2 sm:p-4 flex flex-col items-center justify-center overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors duration-300 relative group">
               {/* Subtle grid background for the room container in light mode */}
               <div className="absolute inset-0 opacity-[0.03] dark:hidden pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '24px 24px' }} />
               
