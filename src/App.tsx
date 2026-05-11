@@ -22,6 +22,8 @@ import {
   Menu,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Settings,
   MoreVertical
 } from 'lucide-react';
@@ -144,6 +146,7 @@ export default function App() {
   const [isAlternating, setIsAlternating] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [showMobileActions, setShowMobileActions] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -796,9 +799,31 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden relative">
+      {/* Restore Header Button (Floating) */}
+      {!isHeaderVisible && (
+        <motion.button
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          onClick={() => setIsHeaderVisible(true)}
+          className="fixed top-2 right-6 z-[100] p-2 bg-indigo-600 text-white rounded-xl shadow-xl hover:bg-indigo-500 transition-all border border-indigo-400/30 flex items-center gap-2 group"
+          title="Afficher la barre supérieure"
+        >
+          <ChevronDown className="w-5 h-5" />
+          <span className="text-[10px] font-black uppercase tracking-widest overflow-hidden w-0 group-hover:w-20 transition-all">Afficher</span>
+        </motion.button>
+      )}
+
       {/* Header & Global Stats */}
-      <header className="bg-[var(--bg-header)] border-[var(--nav-border)] border-b px-4 sm:px-8 py-4 sm:py-5 shrink-0 shadow-sm z-30 transition-colors duration-300">
+      <AnimatePresence>
+        {isHeaderVisible && (
+          <motion.header 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="bg-[var(--bg-header)] border-[var(--nav-border)] border-b px-4 sm:px-8 py-4 sm:py-5 shrink-0 shadow-sm z-30 transition-colors duration-300 overflow-hidden"
+          >
         <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
           <div className="flex items-center justify-between w-full lg:w-auto gap-5">
             <div className="flex items-center gap-3 sm:gap-5">
@@ -852,6 +877,14 @@ export default function App() {
               title={isDarkMode ? "Passer au mode clair" : "Passer au mode sombre"}
             >
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+
+            <button 
+              onClick={() => setIsHeaderVisible(false)}
+              className="p-2 rounded-xl bg-[var(--nav-btn-bg)] border border-[var(--nav-border)] text-[var(--nav-text-secondary)] hover:text-white transition-all"
+              title="Masquer la barre supérieure"
+            >
+              <ChevronUp className="w-5 h-5" />
             </button>
 
             <button 
@@ -919,7 +952,9 @@ export default function App() {
             </div>
           </div>
         </div>
-      </header>
+      </motion.header>
+      )}
+      </AnimatePresence>
 
       {/* Mobile Actions Dropdown */}
       <AnimatePresence>
